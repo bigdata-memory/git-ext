@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+
+# Copyleft 2021-2021 by Gordon King
+# Use at your own risk
+# Prerequisites:
+# 1) git-filter-repo
+#    https://github.com/newren/git-filter-repo
+# 2) Fresh clone repo.
+
+set -e
+
+BLOB_COUNT="0"
+PATTERN=".*"
+
+function usage {
+    echo "Usage: $(basename $0) [-hcp]" 2>&1
+    echo '   -h           shows usage'
+    echo "   -c <count>   the number of output (default: $BLOB_COUNT)"
+    echo '   -p <pattern> file pattern'
+    exit 1
+}
+
+optstring="hc:p:"
+while getopts ${optstring} arg; do
+    case ${arg} in
+        h)
+            echo "showing usage!"
+            usage
+            ;;
+        c)
+            BLOB_COUNT=$OPTARG
+            ;;
+        p)
+            PATTERN=$OPTARG
+            ;;
+    esac
+done
+
+shift $((OPTIND-1))
+
+if [ -z "${BLOB_COUNT}" ] || [ -z "${PATTERN}" ]; then
+    usage
+fi
+
+ORIG_PACKSIZE=$(du -b .git/objects/pack | awk '{print $1}')
+echo "Your repository occupied $(numfmt --to=si --format='%.0f' --round=nearest $ORIG_PACKSIZE) disk space"
+
+echo "Retrieve repository blobs..."
+mapfile -t BLOBS < <( git find-largeblobs -c $BLOB_COUNT -q -p $PATTERN)
+EXP_SUM=0
+for blob in "${BLOBS[@]}"; do
+    SHA1=$( echo $blob | awk '{print $2}' )
+    FILE=$( echo $blob | awk '{print $3}' )
+    SIZE=$( echo $blob | awk '{print $1}' )
+    EXP_SUM=$((EXP_SUM + SIZE))
+    IFS='%'; RSIZE=$( numfmt --to=si --format='%6.0f' --round=nearest $SIZE )
+    echo $RSIZE $SHA1 $FILE
+done
+echo "Found ${#BLOBS[@]} blobs, estimated save:$( numfmt --to=si --format='%.0f' --round=nearest $EXP_SUM )"
+if [[ ${#BLOBS[@]} -eq 0 ]]; then
+    echo "Nothing to prune."
+    exit 0;
+fi
+
+while true; do
+echo "NOTICE: this operation can NOT be undo !"
+read -p "Continue to prune (Yes/no)? " yn
+case $yn in
+    Yes)
+       echo "You chose to continue."
+       break
+       ;;
+    no|No)
+       exit 2
+       ;;
+    *)
+       echo "Invalid input..."
+       ;;
+esac
+done
+
+echo "Pruning those blobs in repository..."
+# COND_FILES=$(printf '%s\n' ${BLOBS[@]} | awk '{print $3}' | tr '\n' ' ')
+# git filter-branch --index-filter "git rm --cached --ignore-unmatch $COND_FILES" --prune-empty --force -- --all
+PATH_ARGS=$( printf "%s\n" ${BLOBS[@]} | awk '{print $3}' )
+PATH_ARGS=$( echo $PATH_ARGS | xargs )
+PATH_ARGS="--path-match ${PATH_ARGS// / --path-match }"
+bash -c "git filter-repo $PATH_ARGS --invert-paths"
+
+echo "Cleaning repository..."
+# rm -rf .git/refs/original/ && git reflog expire --expire=now --all && git fsck --full --unreachable && git repack -A -d && git gc --aggressive --prune=now
+git gc --aggressive --prune=now
+
+NEW_PACKSIZE=$(du -b .git/objects/pack | awk '{print $1}')
+echo "Your repository originally occupied $(numfmt --to=si --format='%.0f' --round=nearest $ORIG_PACKSIZE) disk space, and now $(numfmt --to=si --format='%.0f' --round=nearest $NEW_PACKSIZE), actually saved $(numfmt --to=si --format='%.0f' --round=nearest $(expr $ORIG_PACKSIZE - $NEW_PACKSIZE))"
+
+echo "Done."

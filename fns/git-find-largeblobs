@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+
+# Copyleft 2021-2021 by Gordon King
+# Use at your own risk
+
+set -e
+
+# The count
+BLOB_COUNT="5"
+QUIET=false
+READABLE=false
+TOTAL=false
+PATTERN=".*"
+
+function usage {
+    echo "Usage: $(basename $0) [-hrqtcp]" 2>&1
+    echo '   -h           shows usage'
+    echo '   -r           human readable'
+    echo '   -q           quiet'
+    echo '   -t           total'
+    echo "   -c <count>   the number of output (default: $BLOB_COUNT)"
+    echo '   -p <pattern> file pattern'
+    exit 1
+}
+
+# if [[ ${#} -eq 0 ]]; then
+#     usage
+# fi
+
+optstring="hrqtc:p:"
+while getopts ${optstring} arg; do
+    case ${arg} in
+        h)
+            echo "showing usage!"
+            usage
+            ;;
+        r)
+            READABLE=true
+            ;;
+        q)
+            QUIET=true
+            ;;
+        t)
+            TOTAL=true
+            ;;
+        c)
+            BLOB_COUNT=$OPTARG
+            ;;
+        p)
+            PATTERN=$OPTARG
+            ;;
+    esac
+done
+
+shift $((OPTIND-1))
+
+if [ -z "${BLOB_COUNT}" ] || [ -z "${READABLE}" ]; then
+    usage
+fi
+
+if ! $QUIET; then echo "Retrieve repository blobs..."; fi
+mapfile -t BLOBS < <( git verify-pack -v .git/objects/pack/*.idx | grep blob | sort -k 3 -g -r | head -$BLOB_COUNT )
+FOUND_CNT=0
+SIZE_SUM=0
+for blob in "${BLOBS[@]}"; do
+    SHA1=$( echo $blob | awk '{print $1}')
+    FILE=$( git rev-list --objects --all | grep "$SHA1" | cut -d" "  -f2- )
+    SIZE=$( echo $blob | awk '{ print $3 }' )
+    if [[ $FILE =~ $PATTERN ]]; then
+        if $READABLE; then
+            IFS='%'; RSIZE="$( numfmt --to=si --format='%6.0f' --round=nearest $SIZE )"
+            echo $RSIZE $SHA1 $FILE
+        else
+            echo $SIZE $SHA1 $FILE
+        fi
+        FOUND_CNT=$((FOUND_CNT + 1))
+        SIZE_SUM=$((SIZE_SUM + SIZE))
+    fi
+done
+if ! $QUIET; then echo "Found $FOUND_CNT blobs."; fi
+if $TOTAL; then echo "Total $( numfmt --to=si --format='%.0f' $SIZE_SUM )"; fi
