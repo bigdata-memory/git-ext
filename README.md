@@ -28,8 +28,8 @@ git find-largeblobs -c 10 -t -r -p "tar\.gz$"
 
 ### `git prune-largeblobs [-h] [-c <count>] [-p <pattern>]`
 #### Prerequisites:
-       1. [git-filter-repo](https://github.com/newren/git-filter-repo). For Ubuntu, `sudo apt install git-filter-repo --edge`
-       2. Fresh clone repository.
+1. [git-filter-repo](https://github.com/newren/git-filter-repo). For Ubuntu, `sudo apt install git-filter-repo --edge`
+2. Fresh clone repository.
 
 * `-h` - Show usage
 * `-c <number>` - The number of large blobs to find (default:5)
