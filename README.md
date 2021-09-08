@@ -19,7 +19,7 @@ $ export PATH=$PATH:$HOME/git-ext/fns
 * `-c <number>` - The number of large blobs to find (default:5)
 * `-p <pattern>` - The regex used to filter large blobs
 
-list specified number of large files.
+list specified number of large blobs.
 
 Example:
 ```sh
@@ -35,7 +35,7 @@ git find-largeblobs -c 10 -t -r -p "tar\.gz$"
 * `-c <number>` - The number of large blobs to find (default:5)
 * `-p <pattern>` - The regex used to filter large blobs
 
-list specified number of large files.
+Prune selected large blobs.
 
 Example:
 ```sh
